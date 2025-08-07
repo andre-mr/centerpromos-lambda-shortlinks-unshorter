@@ -1,0 +1,96 @@
+name: Deploy Lambda
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+      - name: Cache npm dependencies
+        uses: actions/cache@v3
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package.json', '**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+      - name: Install dependencies
+        run: npm i
+      - name: Run tests
+        run: npm test
+        env:
+          AMAZON_ACCESS_KEY_ID: ${{ secrets.AMAZON_ACCESS_KEY_ID }}
+          AMAZON_SECRET_ACCESS_KEY: ${{ secrets.AMAZON_SECRET_ACCESS_KEY }}
+          AMAZON_REGION: ${{ secrets.AMAZON_REGION }}
+          AMAZON_DYNAMODB_TABLE: ${{ secrets.AMAZON_DYNAMODB_TABLE }}
+
+  prepare-matrix:
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - id: set-matrix
+        shell: bash
+        run: |
+          echo "Debug: Creating matrix..."
+          NAMES="${{ vars.AMAZON_LAMBDA_FUNCTION_NAMES }}"
+
+          # Split the names and create a JSON array manually
+          IFS='|' read -ra FUNCTIONS <<< "$NAMES"
+          JSON="["
+          for i in "${!FUNCTIONS[@]}"; do
+            if [ $i -gt 0 ]; then
+              JSON="$JSON,"
+            fi
+            JSON="$JSON\"${FUNCTIONS[$i]}\""
+          done
+          JSON="$JSON]"
+
+          echo "Matrix JSON array: $JSON"
+          echo "matrix={\"function_name\":$JSON}" >> $GITHUB_OUTPUT
+
+  deploy:
+    needs: prepare-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+      - name: Restore npm dependencies
+        uses: actions/cache@v3
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package.json', '**/package-lock.json') }}
+
+      - name: Zip Lambda function
+        run: |
+          mkdir deploy
+          cp -r src/* deploy/
+          cd deploy
+          zip -r ../function.zip .
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AMAZON_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AMAZON_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AMAZON_REGION }}
+
+      - name: Deploy to Lambda
+        run: |
+          aws lambda update-function-code \
+            --function-name ${{ matrix.function_name }} \
+            --zip-file fileb://function.zip

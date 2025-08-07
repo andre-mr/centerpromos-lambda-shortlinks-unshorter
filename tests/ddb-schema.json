@@ -1,0 +1,12 @@
+[
+  {
+    "PK": "testid",
+    "AccountID": "",
+    "Campaign": "testcampaign",
+    "Clicks": 0,
+    "Created": "2025-08-01T00:00:00.001Z",
+    "Domain": "link.domain.com",
+    "TTL": 0,
+    "Url": "https://example.com"
+  }
+]
