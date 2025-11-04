@@ -37,7 +37,7 @@ describe("Lambda Handler Unshorter Tests", () => {
   test("should successfully redirect when item exists", async () => {
     const mockEvent = {
       credentials,
-      rawPath: "/testcampaign/testid",
+      rawPath: "/:promodev/testid",
     };
     const response = await handler(mockEvent);
     expect(response.statusCode).toBe(302);
@@ -59,7 +59,7 @@ describe("Lambda Handler Unshorter Tests", () => {
   test("should return 404 for a non-existent item", async () => {
     const mockEvent = {
       credentials,
-      rawPath: "/testcampaign/nonexistentid",
+      rawPath: "/:promodev/nonexistentid",
     };
     const response = await handler(mockEvent);
     expect(response.statusCode).toBe(404);
@@ -70,7 +70,7 @@ describe("Lambda Handler Unshorter Tests", () => {
   test("should return 404 when campaign does not match", async () => {
     const mockEvent = {
       credentials,
-      rawPath: "/wrongcampaign/testid",
+      rawPath: "/:wrongcampaign/testid",
     };
     const response = await handler(mockEvent);
     expect(response.statusCode).toBe(404);
@@ -87,7 +87,7 @@ describe("Lambda Handler Unshorter Tests", () => {
         ...credentials,
         AMAZON_DYNAMODB_TABLE: undefined,
       },
-      rawPath: "/testcampaign/testid",
+      rawPath: "/:promodev/testid",
     };
 
     const response = await handler(mockEvent);
