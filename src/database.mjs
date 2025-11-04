@@ -60,29 +60,34 @@ export const getRedirectUrl = async (event = {}) => {
     return null;
   }
 
-  const fragments = path.replace(/^\//, "").split("/");
-  if (fragments.length !== 2) {
-    return null;
+  const parts = path.replace(/^\//, "").split("/");
+  const [firstPart, secondPart] = parts;
+
+  let account = null;
+  let linkId = null;
+
+  if (firstPart && firstPart.startsWith(":")) {
+    account = firstPart.replace(/^:/, "");
+    linkId = secondPart;
+  } else {
+    linkId = firstPart;
   }
 
-  const campaign = fragments[0]?.toLowerCase();
-  const linkId = fragments[1]?.toLowerCase();
-
-  if (!campaign || !linkId || linkId.length < 3) {
+  if (!account || !linkId || linkId.length < 3) {
     return null;
   }
 
   const params = {
     TableName: AMAZON_DYNAMODB_TABLE,
     Key: {
-      PK: linkId,
+      PK: account ? `${account.toUpperCase()}#${linkId}` : linkId,
     },
   };
 
   try {
     const result = await docClient.send(new GetCommand(params));
 
-    if (result.Item && result.Item.Campaign?.toLowerCase() === campaign && result.Item.Url) {
+    if (result.Item && result.Item.Campaign?.toLowerCase() === account && result.Item.Url) {
       if ("Clicks" in result.Item) {
         incrementClicks(linkId);
       }
