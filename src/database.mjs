@@ -88,6 +88,42 @@ export const getRedirectUrl = async (event = {}) => {
     const result = await docClient.send(new GetCommand(params));
 
     if (result?.Item?.Url) {
+      // Collect tracking params from queryStringParameters (fallback to rawQueryString)
+      const TRACK_KEYS = ["fbclid", "gclid", "ttclid", "twclid"];
+
+      // Prefer queryStringParameters; fallback to parsing rawQueryString
+      const qsParams = event.rawEvent?.queryStringParameters ?? event.queryStringParameters;
+      let collected = {};
+
+      if (qsParams && typeof qsParams === "object") {
+        for (const key of TRACK_KEYS) {
+          const val = qsParams[key];
+          if (val) collected[key] = val;
+        }
+      } else {
+        const rawQs = event.rawEvent?.rawQueryString ?? event.rawQueryString;
+        if (rawQs) {
+          const sp = new URLSearchParams(rawQs);
+          for (const key of TRACK_KEYS) {
+            const v = sp.get(key);
+            if (v) collected[key] = v;
+          }
+        }
+      }
+
+      if (Object.keys(collected).length) {
+        try {
+          const urlObj = new URL(result.Item.Url);
+          for (const [k, v] of Object.entries(collected)) {
+            urlObj.searchParams.set(k, v);
+          }
+          result.Item.Url = urlObj.toString();
+        } catch (_) {
+          const sep = result.Item.Url.includes("?") ? "&" : "?";
+          const qs = new URLSearchParams(collected).toString();
+          result.Item.Url = `${result.Item.Url}${sep}${qs}`;
+        }
+      }
       if ("Clicks" in result.Item) {
         incrementClicks(linkId);
       }
