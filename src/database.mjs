@@ -87,7 +87,7 @@ export const getRedirectUrl = async (event = {}) => {
   try {
     const result = await docClient.send(new GetCommand(params));
 
-    if (result.Item && result.Item.Campaign?.toLowerCase() === account && result.Item.Url) {
+    if (result?.Item?.Url) {
       if ("Clicks" in result.Item) {
         incrementClicks(linkId);
       }
