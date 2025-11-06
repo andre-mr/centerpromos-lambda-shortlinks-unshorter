@@ -125,7 +125,7 @@ export const getRedirectUrl = async (event = {}) => {
         }
       }
       if ("Clicks" in result.Item) {
-        incrementClicks(linkId);
+        incrementClicks(account ? `${account.toUpperCase()}#${linkId}` : linkId);
       }
       return result.Item.Url;
     }
