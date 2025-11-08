@@ -17,3 +17,6 @@ function.zip
 
 # AWS SAM
 .aws-sam/
+
+# Local Dev Files
+dev/

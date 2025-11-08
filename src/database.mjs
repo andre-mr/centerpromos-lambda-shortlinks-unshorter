@@ -45,6 +45,45 @@ const incrementClicks = async (linkId) => {
 export const getRedirectUrl = async (event = {}) => {
   initializeClient(event);
 
+  const BOT_USER_AGENTS = [
+    "Googlebot",
+    "Google-InspectionTool",
+    "AdsBot-Google",
+    "bingbot",
+    "YandexBot",
+    "Baiduspider",
+    "DuckDuckBot",
+    "Applebot",
+    "PetalBot",
+    "Bytespider",
+    "Sogou",
+    "Exabot",
+    "Qwantify",
+    "SeznamBot",
+    "facebookexternalhit",
+    "Facebot",
+    "Twitterbot",
+    "LinkedInBot",
+    "Slackbot-LinkExpanding",
+    "Discordbot",
+    "WhatsApp/",
+    "TelegramBot",
+    "SkypeUriPreview",
+    "GPTBot",
+    "ClaudeBot",
+    "PerplexityBot",
+    "CCBot",
+    "ia_archiver",
+  ];
+  const headers = event.rawEvent?.headers ?? event.headers ?? {};
+  const requestHttp = event.rawEvent?.requestContext?.http ?? event.requestContext?.http;
+  const userAgent =
+    [headers["user-agent"], headers["x-user-agent"], requestHttp?.userAgent].find(
+      (value) => typeof value === "string" && value.trim()
+    ) ?? "";
+  const normalizedUserAgent = userAgent.toLowerCase();
+  const isBot = BOT_USER_AGENTS.some((bot) => normalizedUserAgent.includes(bot.toLowerCase()));
+
   let path = null;
   if (event.rawEvent?.rawPath) {
     path = event.rawEvent.rawPath;
@@ -124,7 +163,7 @@ export const getRedirectUrl = async (event = {}) => {
           result.Item.Url = `${result.Item.Url}${sep}${qs}`;
         }
       }
-      if ("Clicks" in result.Item) {
+      if ("Clicks" in result.Item && !isBot) {
         incrementClicks(account ? `${account.toUpperCase()}#${linkId}` : linkId);
       }
       return result.Item.Url;
