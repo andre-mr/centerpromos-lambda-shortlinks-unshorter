@@ -45,6 +45,19 @@ describe("Lambda Handler Unshorter Tests", () => {
     expect(response.headers.Location).toBe("https://example.com");
   });
 
+  test("should successfully redirect using x-forwarded-host as part of PK", async () => {
+    const mockEvent = {
+      credentials,
+      rawPath: "/testid",
+      headers: {
+        "x-forwarded-host": "link.promodev.com",
+      },
+    };
+    const response = await handler(mockEvent);
+    expect(response.statusCode).toBe(302);
+    expect(response.headers.Location).toBeDefined();
+  });
+
   test("should return 404 for an invalid path", async () => {
     const mockEvent = {
       credentials,

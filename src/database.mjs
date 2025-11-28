@@ -99,27 +99,39 @@ export const getRedirectUrl = async (event = {}) => {
     return null;
   }
 
-  const parts = path.replace(/^\//, "").split("/");
+  const forwardedHostHeader = [headers["x-forwarded-host"], headers["X-Forwarded-Host"]].find(
+    (value) => typeof value === "string" && value.trim()
+  );
+  const forwardedHost = forwardedHostHeader?.trim();
+
+  const parts = path.replace(/^\//, "").split("/").filter(Boolean);
   const [firstPart, secondPart] = parts;
 
   let account = null;
   let linkId = null;
+  let primaryKey = null;
 
-  if (firstPart && firstPart.startsWith(":")) {
+  if (forwardedHost) {
+    linkId = firstPart;
+    primaryKey = linkId ? `${forwardedHost}#${linkId}` : null;
+  } else if (firstPart?.startsWith(":") && secondPart) {
+    // Legacy fallback: account-prefixed paths "/:account/link" (to be removed once new host-based routing is stable)
     account = firstPart.replace(/^:/, "");
     linkId = secondPart;
+    primaryKey = account ? `${account.toUpperCase()}#${linkId}` : null;
   } else {
     linkId = firstPart;
+    primaryKey = linkId ?? null;
   }
 
-  if (!account || !linkId || linkId.length < 3) {
+  if (!linkId || linkId.length < 3 || !primaryKey) {
     return null;
   }
 
   const params = {
     TableName: AMAZON_DYNAMODB_TABLE,
     Key: {
-      PK: account ? `${account.toUpperCase()}#${linkId}` : linkId,
+      PK: primaryKey,
     },
   };
 
@@ -164,7 +176,7 @@ export const getRedirectUrl = async (event = {}) => {
         }
       }
       if ("Clicks" in result.Item && !isBot) {
-        incrementClicks(account ? `${account.toUpperCase()}#${linkId}` : linkId);
+        incrementClicks(primaryKey);
       }
       return result.Item.Url;
     }
