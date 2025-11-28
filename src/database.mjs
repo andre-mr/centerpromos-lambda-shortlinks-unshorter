@@ -107,6 +107,10 @@ export const getRedirectUrl = async (event = {}) => {
   const parts = path.replace(/^\//, "").split("/").filter(Boolean);
   const [firstPart, secondPart] = parts;
 
+  const legacyAccount = firstPart?.startsWith(":") && secondPart ? firstPart.replace(/^:/, "") : null;
+  const legacyLinkId = legacyAccount ? secondPart : null;
+  const legacyPrimaryKey = legacyAccount && legacyLinkId ? `${legacyAccount.toUpperCase()}#${legacyLinkId}` : null;
+
   let account = null;
   let linkId = null;
   let primaryKey = null;
@@ -116,9 +120,9 @@ export const getRedirectUrl = async (event = {}) => {
     primaryKey = linkId ? `${forwardedHost}#${linkId}` : null;
   } else if (firstPart?.startsWith(":") && secondPart) {
     // Legacy fallback: account-prefixed paths "/:account/link" (to be removed once new host-based routing is stable)
-    account = firstPart.replace(/^:/, "");
-    linkId = secondPart;
-    primaryKey = account ? `${account.toUpperCase()}#${linkId}` : null;
+    account = legacyAccount;
+    linkId = legacyLinkId;
+    primaryKey = legacyPrimaryKey;
   } else {
     linkId = firstPart;
     primaryKey = linkId ?? null;
@@ -136,7 +140,23 @@ export const getRedirectUrl = async (event = {}) => {
   };
 
   try {
-    const result = await docClient.send(new GetCommand(params));
+    let result = await docClient.send(new GetCommand(params));
+    let currentPrimaryKey = primaryKey;
+    let currentLinkId = linkId;
+    let currentAccount = account;
+
+    if (!(result?.Item?.Url) && forwardedHost && legacyPrimaryKey && legacyLinkId?.length >= 3) {
+      // Legacy fallback for host-based requests where the item is still stored with the old PK format
+      currentPrimaryKey = legacyPrimaryKey;
+      currentLinkId = legacyLinkId;
+      currentAccount = legacyAccount;
+      result = await docClient.send(
+        new GetCommand({
+          TableName: AMAZON_DYNAMODB_TABLE,
+          Key: { PK: currentPrimaryKey },
+        })
+      );
+    }
 
     if (result?.Item?.Url) {
       // Collect tracking params from queryStringParameters (fallback to rawQueryString)
@@ -176,7 +196,7 @@ export const getRedirectUrl = async (event = {}) => {
         }
       }
       if ("Clicks" in result.Item && !isBot) {
-        incrementClicks(primaryKey);
+        incrementClicks(currentPrimaryKey);
       }
       return result.Item.Url;
     }
