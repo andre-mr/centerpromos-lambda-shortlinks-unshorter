@@ -116,7 +116,7 @@ export const getRedirectUrl = async (event = {}) => {
   let primaryKey = null;
 
   if (forwardedHost) {
-    linkId = firstPart;
+    linkId = secondPart || firstPart;
     primaryKey = linkId ? `${forwardedHost}#${linkId}` : null;
   } else if (firstPart?.startsWith(":") && secondPart) {
     // Legacy fallback: account-prefixed paths "/:account/link" (to be removed once new host-based routing is stable)
@@ -145,7 +145,7 @@ export const getRedirectUrl = async (event = {}) => {
     let currentLinkId = linkId;
     let currentAccount = account;
 
-    if (!(result?.Item?.Url) && forwardedHost && legacyPrimaryKey && legacyLinkId?.length >= 3) {
+    if (!result?.Item?.Url && forwardedHost && legacyPrimaryKey && legacyLinkId?.length >= 3) {
       // Legacy fallback for host-based requests where the item is still stored with the old PK format
       currentPrimaryKey = legacyPrimaryKey;
       currentLinkId = legacyLinkId;
