@@ -106,59 +106,46 @@ export const getRedirectUrl = async (event = {}) => {
 
   const parts = path.replace(/^\//, "").split("/").filter(Boolean);
   const [firstPart, secondPart] = parts;
+  const hasMultiAccount = process.env.MULTI_ACCOUNT === "true";
+  const accountId = parts.length === 2 ? firstPart?.replace(/^:/, "") : null;
+  const linkId = parts.length === 1 ? firstPart : parts.length === 2 ? secondPart : null;
 
-  const legacyAccount = firstPart?.startsWith(":") && secondPart ? firstPart.replace(/^:/, "") : null;
-  const legacyLinkId = legacyAccount ? secondPart : null;
-  const legacyPrimaryKey = legacyAccount && legacyLinkId ? `${legacyAccount.toUpperCase()}#${legacyLinkId}` : null;
-
-  let account = null;
-  let linkId = null;
-  let primaryKey = null;
-
-  if (forwardedHost) {
-    linkId = secondPart || firstPart;
-    primaryKey = linkId ? `${forwardedHost}#${linkId}` : null;
-  } else if (firstPart?.startsWith(":") && secondPart) {
-    // Legacy fallback: account-prefixed paths "/:account/link" (to be removed once new host-based routing is stable)
-    account = legacyAccount;
-    linkId = legacyLinkId;
-    primaryKey = legacyPrimaryKey;
-  } else {
-    linkId = firstPart;
-    primaryKey = linkId ?? null;
-  }
-
-  if (!linkId || linkId.length < 3 || !primaryKey) {
+  if (!linkId || linkId.length < 3) {
     return null;
   }
 
-  const params = {
-    TableName: AMAZON_DYNAMODB_TABLE,
-    Key: {
-      PK: primaryKey,
-    },
-  };
+  // Build lookup order: host-scoped -> account-scoped (when enabled) -> link-only
+  const candidates = [];
+  if (forwardedHost) {
+    candidates.push({ pk: `${forwardedHost}#${linkId}` });
+  }
+  if (hasMultiAccount && accountId) {
+    candidates.push({ pk: `${accountId.toUpperCase()}#${linkId}` });
+  }
+  if (!hasMultiAccount) {
+    candidates.push({ pk: linkId });
+  }
+  console.log("candidates", candidates);
 
   try {
-    let result = await docClient.send(new GetCommand(params));
-    let currentPrimaryKey = primaryKey;
-    let currentLinkId = linkId;
-    let currentAccount = account;
+    let result = null;
+    let resolvedPrimaryKey = null;
 
-    if (!result?.Item?.Url && forwardedHost && legacyPrimaryKey && legacyLinkId?.length >= 3) {
-      // Legacy fallback for host-based requests where the item is still stored with the old PK format
-      currentPrimaryKey = legacyPrimaryKey;
-      currentLinkId = legacyLinkId;
-      currentAccount = legacyAccount;
+    for (const candidate of candidates) {
       result = await docClient.send(
         new GetCommand({
           TableName: AMAZON_DYNAMODB_TABLE,
-          Key: { PK: currentPrimaryKey },
+          Key: { PK: candidate.pk },
         })
       );
+      if (result?.Item?.Url) {
+        console.log("resolvedPrimaryKey", resolvedPrimaryKey);
+        resolvedPrimaryKey = candidate.pk;
+        break;
+      }
     }
 
-    if (result?.Item?.Url) {
+    if (result?.Item?.Url && resolvedPrimaryKey) {
       // Collect tracking params from queryStringParameters (fallback to rawQueryString)
       const TRACK_KEYS = ["fbclid", "gclid", "ttclid", "twclid"];
 
@@ -196,7 +183,7 @@ export const getRedirectUrl = async (event = {}) => {
         }
       }
       if ("Clicks" in result.Item && !isBot) {
-        incrementClicks(currentPrimaryKey);
+        incrementClicks(resolvedPrimaryKey);
       }
       return result.Item.Url;
     }
