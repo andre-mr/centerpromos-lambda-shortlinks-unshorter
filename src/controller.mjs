@@ -57,7 +57,7 @@ export const incrementOfferClicks = async ({
   const normalizedAccount = accountID.trim().toLowerCase();
   const isMultiAccount = process.env.MULTI_ACCOUNT === "true";
   const tableName = (isMultiAccount && normalizedAccount) || process.env.AMAZON_DYNAMODB_TABLE_DEFAULT || null;
-  const domainsToCampaigns = JSON.parse(JSON.stringify(process.env.DOMAINS_TO_CAMPAIGNS) || "");
+  const domainsToCampaigns = JSON.parse(process.env.DOMAINS_TO_CAMPAIGNS || "");
   const normalizedDomain = domainsToCampaigns?.[itemDomain] || "";
   if ((!normalizedCampaign && !normalizedDomain) || !offerID || !tableName) {
     console.error("Invalid parameters for incrementOfferClicks; skipping offer click increment.");
