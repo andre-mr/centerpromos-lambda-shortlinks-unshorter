@@ -42,23 +42,29 @@ const incrementClicks = async (linkId) => {
   }
 };
 
-export const incrementOfferClicks = async ({ itemCampaign = "", offerID = "", accountID = "" } = {}) => {
+export const incrementOfferClicks = async ({
+  itemCampaign = "",
+  itemDomain = "",
+  offerID = "",
+  accountID = "",
+} = {}) => {
   if (!docClient) {
     console.error("DynamoDB client not initialized; skipping offer click increment.");
     return;
   }
 
-  const normalizedCampaign = itemCampaign.replace(/\s+/g, "").toUpperCase();
+  const normalizedCampaign = itemCampaign.replace(/\s+/g, "").trim().toUpperCase();
   const normalizedAccount = accountID.trim().toLowerCase();
   const isMultiAccount = process.env.MULTI_ACCOUNT === "true";
-
   const tableName = (isMultiAccount && normalizedAccount) || process.env.AMAZON_DYNAMODB_TABLE_DEFAULT || null;
-
-  if (!normalizedCampaign || !offerID || !tableName) {
+  const domainsToCampaigns = JSON.parse(JSON.stringify(process.env.DOMAINS_TO_CAMPAIGNS) || "");
+  const normalizedDomain = domainsToCampaigns?.[itemDomain] || "";
+  if ((!normalizedCampaign && !normalizedDomain) || !offerID || !tableName) {
+    console.error("Invalid parameters for incrementOfferClicks; skipping offer click increment.");
     return;
   }
 
-  const offerPK = `OFFER#${normalizedCampaign}`;
+  const offerPK = `OFFER#${normalizedCampaign || normalizedDomain}`;
 
   try {
     await docClient.send(
@@ -114,6 +120,7 @@ export const getRedirectUrl = async (event = {}) => {
     "CCBot",
     "ia_archiver",
   ];
+
   const headers = event.rawEvent?.headers ?? event.headers ?? {};
   const requestHttp = event.rawEvent?.requestContext?.http ?? event.requestContext?.http;
   const userAgent =
@@ -178,7 +185,6 @@ export const getRedirectUrl = async (event = {}) => {
         })
       );
       if (result?.Item?.Url) {
-        console.log("resolvedPrimaryKey", resolvedPrimaryKey);
         resolvedPrimaryKey = candidate.pk;
         break;
       }
@@ -227,12 +233,14 @@ export const getRedirectUrl = async (event = {}) => {
           incrementClicks(resolvedPrimaryKey);
         }
         const itemCampaign = result.Item?.Campaign;
-        const offerId = result.Item?.OfferID ?? result.Item?.OfferSK;
-        if (itemCampaign && offerId) {
+        const itemDomain = result.Item?.Domain;
+        const offerID = result.Item?.OfferID ?? result.Item?.OfferSK;
+        if ((itemCampaign || itemDomain) && offerID) {
           incrementOfferClicks({
             itemCampaign,
-            offerId,
-            accountId: result.Item?.AccountID ?? "",
+            itemDomain,
+            offerID,
+            accountID: result.Item?.AccountID ?? "",
           });
         }
       }
