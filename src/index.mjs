@@ -1,4 +1,4 @@
-import { getRedirectUrl } from "./database.mjs";
+import { getRedirectUrl } from "./controller.mjs";
 
 const loadTemplate = async (templateName) => {
   try {

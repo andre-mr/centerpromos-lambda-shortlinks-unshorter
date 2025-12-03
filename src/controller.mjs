@@ -42,6 +42,45 @@ const incrementClicks = async (linkId) => {
   }
 };
 
+export const incrementOfferClicks = async ({ itemCampaign = "", offerID = "", accountID = "" } = {}) => {
+  if (!docClient) {
+    console.error("DynamoDB client not initialized; skipping offer click increment.");
+    return;
+  }
+
+  const normalizedCampaign = itemCampaign.replace(/\s+/g, "").toUpperCase();
+  const normalizedAccount = accountID.trim().toLowerCase();
+  const isMultiAccount = process.env.MULTI_ACCOUNT === "true";
+
+  const tableName = (isMultiAccount && normalizedAccount) || process.env.AMAZON_DYNAMODB_TABLE_DEFAULT || null;
+
+  if (!normalizedCampaign || !offerID || !tableName) {
+    return;
+  }
+
+  const offerPK = `OFFER#${normalizedCampaign}`;
+
+  try {
+    await docClient.send(
+      new UpdateCommand({
+        TableName: tableName,
+        Key: {
+          PK: offerPK,
+          SK: offerID,
+        },
+        UpdateExpression: "SET Clicks = if_not_exists(Clicks, :initial) + :increment",
+        ExpressionAttributeValues: {
+          ":increment": 1,
+          ":initial": 0,
+        },
+        ConditionExpression: "attribute_exists(SK)",
+      })
+    );
+  } catch (error) {
+    console.error("Error incrementing offer clicks:", error);
+  }
+};
+
 export const getRedirectUrl = async (event = {}) => {
   initializeClient(event);
 
@@ -182,8 +221,20 @@ export const getRedirectUrl = async (event = {}) => {
           result.Item.Url = `${result.Item.Url}${sep}${qs}`;
         }
       }
-      if ("Clicks" in result.Item && !isBot) {
-        incrementClicks(resolvedPrimaryKey);
+
+      if (!isBot) {
+        if (result.Item?.Clicks !== undefined) {
+          incrementClicks(resolvedPrimaryKey);
+        }
+        const itemCampaign = result.Item?.Campaign;
+        const offerId = result.Item?.OfferID ?? result.Item?.OfferSK;
+        if (itemCampaign && offerId) {
+          incrementOfferClicks({
+            itemCampaign,
+            offerId,
+            accountId: result.Item?.AccountID ?? "",
+          });
+        }
       }
       return result.Item.Url;
     }
